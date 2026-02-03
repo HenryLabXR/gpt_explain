@@ -17,7 +17,6 @@ load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 def normalize_user_input(raw_input: str) -> tuple:
     """
     输入规范化：去除冗余、提炼关键需求、压缩重复表述
-    
     就像医生诊断前的问诊规范化 - 把杂乱的症状描述转化为关键信息
     """
     # 移除多余空白
@@ -25,15 +24,11 @@ def normalize_user_input(raw_input: str) -> tuple:
     
     # 根据输入长度判断：长文本解释，短文本介绍术语
     input_length = len(text)
-    is_long_text = input_length >= 120
+    is_long_text = input_length >= 10
     
     # 检测并标记输入类型
-    if any(keyword in text.lower() for keyword in ['代码', 'code', 'error', '错误', 'debug']):
-        category = "code_debug"
-    elif is_long_text:
+    if is_long_text:
         category = "long_text_analysis"
-    elif any(keyword in text.lower() for keyword in ['什么是', 'what is', '如何', 'how']):
-        category = "concept_explanation"
     else:
         category = "term_definition"
     
@@ -50,10 +45,11 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
     base_system_prompt = """你是一个知识解答助手，致力于用最简洁有效的语言传达概念。
 
 【回答格式要求】
+- 持【中文回答】
 - 严谨学术风格，不使用任何markdown格式符号（如**、*、#等）
 - 表达自然流畅，避免每句强制换行，不要产生多余空行
 - 避免冗长铺垫，直接呈现答案
-- 用必要的类比让抽象概念具象化
+- 【重要】用必要的类比让抽象概念具象化
 
 【禁止项】
 - 不使用 ** 或任何markdown加粗标记
@@ -62,29 +58,19 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
 - 不使用填充性用语（如"综上所述"、"值得注意的是"）
 - 不要逐字重复或原样复述用户提供的文本；只提取要点并进行解释或重构
 - 回答长度应随输入长度增长：当用户输入为长段落时，允许更详尽的解释
+- 
 """
     
-    if category == "code_debug":
-        specific_prompt = """
-    【代码问题处理】
-    分析问题时：
-    1. 诊断阶段 - 指出问题的根本原因（而非症状）
-    2. 解决方案 - 给出修复代码及原因解释
-    3. 预防建议 - 如何避免类似问题
-
-    回答长度：150-250词（若用户提供更长的示例或日志，可适当延长）
-    """
-    elif category == "long_text_analysis":
+    if category == "long_text_analysis":
         specific_prompt = """
     【长文本解释分析 - 帮助理解为首要目标】
-    用户提供了一段详细的文本，你的任务是让他完全理解这段话。不是简单总结，而是帮他"为什么需要理解它、是什么、为什么这样、怎么用"。
+    用户提供了一段详细的文本，你的任务是让他完全理解这段话
 
     具体步骤：
     1. 单句提炼 - 用一句话说清"这段话的灵魂是什么"，包含一个日常类比，让人瞬间get
     2. 拆解核心机制 - 一句话概括后，拆解1-3个关键概念，每个用2-3句通俗话+生活例子解释（避免专业术语堆砌）
-    3. 为什么这样 - 解释背后的逻辑或原理，为什么这样设计而不是另一种方式，有什么优劣
-    4. 应用与场景 - 这个概念/机制在什么场景下用，有什么实际意义，如何与其他概念关联
-    5. 整体印象 - 用1个综合性的类比或比喻，让读者形成深刻的整体理解
+    3. 应用与场景 - 这个概念/机制在什么场景下用，有什么实际意义，如何与其他概念关联
+    4.【重要】 整体印象比喻 - 用1个综合性的类比或比喻，让读者形成深刻的整体理解、帮助记忆
 
     输出格式：
     2-4个段落，各段自然连贯，不要在段落间插入多余空行。同一段落内的句子用逗号或句号自然连接，不要每句分行。
@@ -98,7 +84,7 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
     - 避免罗列，强调逻辑关系（"因此"、"这样才能"、"结果是"）
     - 每个抽象概念后立刻跟一个具体例子或数字，增强代入感
 
-    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常250-400词；长段落时可放宽到500-1000词。
+    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常250-400词；长段落时可放宽到400-8000词。
     """
     elif category == "term_definition":
         specific_prompt = """
@@ -106,12 +92,13 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
 输出结构（必须严格遵守）：
 核心定义（一句话，包含简洁的类比）
 [换行]
+比喻或类比解释：用一个生活中的例子或场景来说明这个术语的含义
+[换行]
+应用场景或例子
+[换行]
 关键特性1：不超过2句
 关键特性2：不超过2句
 关键特性3：不超过2句
-[换行]
-应用场景或例子
-
 回答长度：80-150词
 """
     else:
@@ -215,8 +202,13 @@ def explain():
         # 计算方法：每个输入字符映射约 10 token，最少 100 token，最大上限 4000 token
         source_input = selection or user_prompt or normalized_input
         input_len = len(source_input)
-        computed_max_tokens = min(MAX_OUTPUT_TOKENS, max(200, input_len * 12))
-
+        
+        #computed_max_tokens = min(MAX_OUTPUT_TOKENS, max(200, input_len * 12))
+        if input_category == "long_text_analysis":
+            computed_max_tokens = 1800  # 稳定值
+        else:
+            computed_max_tokens = 700
+            
         payload = {
             "model": DEFAULT_MODEL,
             "messages": [
