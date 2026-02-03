@@ -84,7 +84,7 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
     - 避免罗列，强调逻辑关系（"因此"、"这样才能"、"结果是"）
     - 每个抽象概念后立刻跟一个具体例子或数字，增强代入感
 
-    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常250-400词；长段落时可放宽到400-8000词。
+    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常150-300词；长段落时可放宽到200-500词。
     """
     elif category == "term_definition":
         specific_prompt = """
@@ -205,10 +205,10 @@ def explain():
         
         #computed_max_tokens = min(MAX_OUTPUT_TOKENS, max(200, input_len * 12))
         if input_category == "long_text_analysis":
-            computed_max_tokens = 1800  # 稳定值
+            computed_max_tokens = 1200  # 稳定值
         else:
-            computed_max_tokens = 700
-            
+            computed_max_tokens = 500
+
         payload = {
             "model": DEFAULT_MODEL,
             "messages": [
