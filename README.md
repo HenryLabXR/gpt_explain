@@ -4,10 +4,7 @@
 
 ## 功能
 - 选中文本右键解释
-- 长文自动分段解释（2-4 段）
-- 输出自动去除多余换行
-- 输出过长时可滚动
-- 请求中显示“加载中”状态
+
 
 ## 运行环境
 - Windows 10/11
@@ -44,7 +41,6 @@ python .\main.py
 1. 打开 Edge，进入 `edge://extensions/`
 2. 打开“开发者模式”
 3. 点击“加载解压缩扩展”，选择 `edge_gpt_explain/extension`
-4. 如果你修改了扩展代码，请在扩展页点击“刷新”
 
 ### 3. 使用
 1. 在网页中选中一段文本
@@ -56,16 +52,10 @@ python .\main.py
 - 长文本：自动做分段解释（摘要 + 细节 + 总类比）
 
 ## 常见问题
-### 1. Missing API key
+### Missing API key
 检查 `edge_gpt_explain/server/.env` 是否存在且包含 `OPENAI_API_KEY`。  
 确保启动服务的目录是 `edge_gpt_explain/server`，或已正确配置 `.env` 路径。
 
-### 2. 没有显示“加载中”
-先确认已刷新扩展和当前网页。  
-`edge://`、`chrome://`、扩展页、PDF 内置查看器等页面禁止注入脚本，无法显示窗口。
-
-### 3. 输出换行太多或不自然
-服务端已自动合并段内换行，并按照 2-4 段输出。如果仍不满意，可继续调整 `server/main.py` 中的提示词规则。
 
 ## 项目结构
 - `edge_gpt_explain/server`：本地服务端（Flask）
