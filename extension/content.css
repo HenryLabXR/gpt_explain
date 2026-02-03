@@ -1,0 +1,44 @@
+﻿#gpt-explain-container {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 360px;
+  max-width: calc(100vw - 32px);
+  background: #101820;
+  color: #f2f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  font: 14px/1.5 "Segoe UI", Arial, sans-serif;
+  z-index: 2147483647;
+}
+
+.gpt-explain-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  background: #0b0f14;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.gpt-explain-title {
+  font-weight: 600;
+}
+
+.gpt-explain-close {
+  background: transparent;
+  border: none;
+  color: #f2f5f7;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.gpt-explain-body {
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+#gpt-explain-container.gpt-explain-error {
+  border-color: rgba(255, 90, 90, 0.5);
+}
