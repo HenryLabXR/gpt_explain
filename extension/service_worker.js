@@ -15,7 +15,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const selection = info.selectionText.trim();
   if (!selection) return;
 
-  const prompt = `what is ${selection}`;
+  const isLongText = selection.length >= 120 || selection.includes("\n");
+  const prompt = isLongText ? "" : `what is ${selection}`;
 
   try {
     const res = await fetch(SERVER_URL, {

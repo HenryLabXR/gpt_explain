@@ -36,7 +36,18 @@
 
 .gpt-explain-body {
   padding: 12px;
-  white-space: pre-wrap;
+  white-space: normal;
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#gpt-explain-container .gpt-explain-body p {
+  margin: 0 0 8px 0;
+}
+
+#gpt-explain-container .gpt-explain-body p:last-child {
+  margin-bottom: 0;
 }
 
 #gpt-explain-container.gpt-explain-error {

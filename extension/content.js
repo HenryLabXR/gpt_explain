@@ -27,12 +27,50 @@
   function setBody(content, isError) {
     const el = ensureContainer();
     const body = el.querySelector(".gpt-explain-body");
-    body.textContent = content;
+    if (isError) {
+      body.textContent = content;
+    } else {
+      body.innerHTML = formatAnswer(content);
+    }
     if (isError) {
       el.classList.add("gpt-explain-error");
     } else {
       el.classList.remove("gpt-explain-error");
     }
+  }
+
+  function formatAnswer(raw) {
+    if (!raw) return "";
+    let text = String(raw).replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    text = stripSelectionLine(text);
+
+    const paragraphs = text
+      .split(/\n\s*\n+/)
+      .map((p) => p.replace(/\s*\n\s*/g, " ").trim())
+      .filter(Boolean);
+
+    if (paragraphs.length === 0) return "";
+
+    return paragraphs.map((p) => `<p>${escapeHtml(p)}</p>`).join("");
+  }
+
+  function stripSelectionLine(text) {
+    const lines = text.split("\n");
+    const filtered = lines.filter((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return true;
+      return !/^(selected|selection|输入)\s*[:：]/i.test(trimmed);
+    });
+    return filtered.join("\n");
+  }
+
+  function escapeHtml(value) {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
   }
 
   chrome.runtime.onMessage.addListener((msg) => {

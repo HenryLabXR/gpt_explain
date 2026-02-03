@@ -25,15 +25,17 @@ def normalize_user_input(raw_input: str) -> tuple:
     
     # 根据输入长度判断：长文本解释，短文本介绍术语
     input_length = len(text)
-    is_long_text = input_length >= 50
+    is_long_text = input_length >= 120
     
     # 检测并标记输入类型
     if any(keyword in text.lower() for keyword in ['代码', 'code', 'error', '错误', 'debug']):
         category = "code_debug"
+    elif is_long_text:
+        category = "long_text_analysis"
     elif any(keyword in text.lower() for keyword in ['什么是', 'what is', '如何', 'how']):
         category = "concept_explanation"
     else:
-        category = "long_text_analysis" if is_long_text else "term_definition"
+        category = "term_definition"
     
     return text, category
 
@@ -49,7 +51,7 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
 
 【回答格式要求】
 - 严谨学术风格，不使用任何markdown格式符号（如**、*、#等）
-- 必须使用换行分隔不同部分，每个部分独立成行
+- 表达自然流畅，避免每句强制换行，不要产生多余空行
 - 避免冗长铺垫，直接呈现答案
 - 用必要的类比让抽象概念具象化
 
@@ -74,24 +76,29 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
     """
     elif category == "long_text_analysis":
         specific_prompt = """
-    【长文本解释分析】
-    用户提供了一段详细的文本，你需要：
-    1. 提取核心含义 - 用一句话总结这段话的主要意思
-    2. 技术细节解读 - 解释其中涉及的关键概念和机制
-    3. 相关联系 - 说明与其他类似技术或概念的关系
+    【长文本解释分析 - 帮助理解为首要目标】
+    用户提供了一段详细的文本，你的任务是让他完全理解这段话。不是简单总结，而是帮他"为什么需要理解它、是什么、为什么这样、怎么用"。
 
-    输出结构：
-    核心含义解读（一句话概括，可包含类比）
+    具体步骤：
+    1. 单句提炼 - 用一句话说清"这段话的灵魂是什么"，包含一个日常类比，让人瞬间get
+    2. 拆解核心机制 - 一句话概括后，拆解1-3个关键概念，每个用2-3句通俗话+生活例子解释（避免专业术语堆砌）
+    3. 为什么这样 - 解释背后的逻辑或原理，为什么这样设计而不是另一种方式，有什么优劣
+    4. 应用与场景 - 这个概念/机制在什么场景下用，有什么实际意义，如何与其他概念关联
+    5. 整体印象 - 用1个综合性的类比或比喻，让读者形成深刻的整体理解
 
-    分段解释：针对长段落，按主题或逻辑分为多段，每段用1-3个段落句子详细说明，段落间用空行分隔
+    输出格式：
+    2-4个段落，各段自然连贯，不要在段落间插入多余空行。同一段落内的句子用逗号或句号自然连接，不要每句分行。
+    - 第1段（核心理解）：1句灵魂总结+类比，用最简洁的方式tell the big picture
+    - 第2-3段（拆解与深化）：逐个拆解关键概念，每个2-3句+1个类比或例子；解释为什么和怎么用
+    - 最后1段（收束）：1个综合类比或对照，帮读者形成完整映像
 
-    关键技术点1：详细解释这个概念/机制
-    关键技术点2：详细解释这个概念/机制
-    关键技术点3：详细解释这个概念/机制
+    语言技巧：
+    - 多用"就像"、"好比"、"类似于"等类比词引出生活例子
+    - 用反问句或对比来加深理解（"你可能想，为什么不...？原因是..."）
+    - 避免罗列，强调逻辑关系（"因此"、"这样才能"、"结果是"）
+    - 每个抽象概念后立刻跟一个具体例子或数字，增强代入感
 
-    与相关技术的比较或应用场景
-
-    回答长度：通常200-300词；当输入为长段落时，按输入长度显著放宽输出（保留多段结构与充分解释），优先保证信息密度与可理解性
+    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常250-400词；长段落时可放宽到500-1000词。
     """
     elif category == "term_definition":
         specific_prompt = """
@@ -120,28 +127,46 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
 
 def compress_explanation(text: str) -> str:
     """
-    后处理：删除冗余表述，压缩最终回答
+    后处理：删除冗余表述，保留清晰段落结构但减少过多空行
     """
     # 移除常见的填充词
     filler_words = ['综上所述', '需要注意的是', '值得一提的是', '众所周知', '尤其是', '非常']
     for word in filler_words:
         text = text.replace(word, '')
-    # 规范换行：保留段落换行，但去除行首尾空格，合并连续空行为单个空行
+    
+    # 规范换行
     text = text.replace('\r\n', '\n').replace('\r', '\n')
-    lines = [line.strip() for line in text.split('\n')]
-    new_lines = []
-    prev_empty = False
+    
+    # 按行拆分
+    lines = []
+    for line in text.split('\n'):
+        cleaned = line.strip()
+        # 过滤掉"selected"等前缀信息
+        if re.match(r'^(selected|selection|输入)\s*[:：]', cleaned, re.IGNORECASE):
+            continue
+        lines.append(cleaned)
+
+    # 重建段落：连续非空行合并成一段，只在原有段落间保留单个空行
+    paragraphs = []
+    current = []
     for line in lines:
         if line == '':
-            if not prev_empty:
-                new_lines.append('')
-            prev_empty = True
+            if current:
+                para_text = ' '.join(current).strip()
+                if para_text:
+                    paragraphs.append(para_text)
+                current = []
         else:
-            new_lines.append(line)
-            prev_empty = False
+            current.append(line)
+    
+    if current:
+        para_text = ' '.join(current).strip()
+        if para_text:
+            paragraphs.append(para_text)
 
-    text = '\n'.join(new_lines).strip()
-    return text
+    # 用单换行分隔段落，减少过多空白
+    text = '\n'.join(paragraphs)
+    return text.strip()
 
 # Optional: auto-apply local proxy for VPN if provided via env.
 proxy_port = os.getenv("PROXY_PORT", "").strip()
@@ -198,7 +223,7 @@ def explain():
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": normalized_input}
             ],
-            "temperature": 0.3,
+            "temperature": 0.4 if input_category == "long_text_analysis" else 0.3,
             "max_tokens": computed_max_tokens,
             "stream": False,
         }
