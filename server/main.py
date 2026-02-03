@@ -1,13 +1,14 @@
 import os
 import re
 import traceback
+from pathlib import Path
 
 import httpx
 from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-load_dotenv()
+load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 # ============================================================================
 # Prompt Optimization System - 成本优化与输出精简化系统
@@ -156,6 +157,7 @@ CORS(app, resources={r"/explain": {"origins": "*"}})
 BASE_URL = os.getenv("BASE_URL", "https://api.vectorengine.ai").rstrip("/")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")
+MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "8000"))
 
 
 @app.route("/explain", methods=["POST"])
@@ -188,7 +190,7 @@ def explain():
         # 计算方法：每个输入字符映射约 10 token，最少 100 token，最大上限 4000 token
         source_input = selection or user_prompt or normalized_input
         input_len = len(source_input)
-        computed_max_tokens = min(4000, max(100, input_len * 10))
+        computed_max_tokens = min(MAX_OUTPUT_TOKENS, max(200, input_len * 12))
 
         payload = {
             "model": DEFAULT_MODEL,
@@ -209,8 +211,10 @@ def explain():
 
         response_data = resp.json()
         output_text = None
+        finish_reason = None
         try:
             output_text = response_data["choices"][0]["message"]["content"]
+            finish_reason = response_data["choices"][0].get("finish_reason")
         except Exception:
             output_text = None
 
@@ -220,7 +224,7 @@ def explain():
         # 应用输出优化：压缩冗余表述
         optimized_output = compress_explanation(output_text)
 
-        return jsonify(ok=True, text=optimized_output.strip())
+        return jsonify(ok=True, text=optimized_output.strip(), finish_reason=finish_reason)
 
     except Exception as exc:
         traceback.print_exc()
@@ -228,5 +232,6 @@ def explain():
 
 
 if __name__ == "__main__":
+    print("API_KEY:", os.getenv("OPENAI_API_KEY"))
     port = int(os.getenv("PORT", "8787"))
     app.run(host="127.0.0.1", port=port)
