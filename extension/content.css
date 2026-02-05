@@ -1,4 +1,4 @@
-﻿#gpt-explain-container {
+#gpt-explain-container {
   position: fixed;
   top: 16px;
   right: 16px;
@@ -24,6 +24,27 @@
 
 .gpt-explain-title {
   font-weight: 600;
+}
+
+.gpt-explain-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.gpt-explain-btn {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #f2f5f7;
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.gpt-explain-btn:hover {
+  background: rgba(255, 255, 255, 0.18);
 }
 
 .gpt-explain-close {
@@ -52,4 +73,18 @@
 
 #gpt-explain-container.gpt-explain-error {
   border-color: rgba(255, 90, 90, 0.5);
+}
+
+#gpt-explain-toolbar {
+  position: absolute;
+  display: none;
+  gap: 6px;
+  padding: 6px;
+  background: #101820;
+  color: #f2f5f7;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+  z-index: 2147483647;
+  font: 12px/1.4 "Segoe UI", Arial, sans-serif;
 }

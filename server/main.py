@@ -112,12 +112,31 @@ def build_optimized_prompt(user_input: str, category: str) -> str:
     return base_system_prompt + specific_prompt
 
 
+def build_translate_prompt(target_lang: str) -> str:
+    return f"""
+你是一个专业翻译与术语解释助手，请将用户输入内容翻译为{target_lang}。
+
+要求：
+1. 保持原意准确，不随意扩展。
+2. 如涉及专业术语，给出规范译法。
+3. 如涉及计算机/工程含义，请补充说明。
+4. 表达简洁严谨。
+
+禁止使用markdown格式。
+"""
+
 def compress_explanation(text: str) -> str:
     """
     后处理：删除冗余表述，保留清晰段落结构但减少过多空行
     """
     # 移除常见的填充词
-    filler_words = ['综上所述', '需要注意的是', '值得一提的是', '众所周知', '尤其是', '非常']
+    filler_words = [
+    "综上所述",
+    "值得注意的是",
+    "需要指出的是",
+    "可以看出",
+    "总体来看"
+    ]
     for word in filler_words:
         text = text.replace(word, '')
     
@@ -129,7 +148,9 @@ def compress_explanation(text: str) -> str:
     for line in text.split('\n'):
         cleaned = line.strip()
         # 过滤掉"selected"等前缀信息
-        if re.match(r'^(selected|selection|输入)\s*[:：]', cleaned, re.IGNORECASE):
+        
+
+        if re.match(r'^(selected|selection)\s*[:?]', cleaned, re.IGNORECASE):
             continue
         lines.append(cleaned)
 
@@ -155,6 +176,31 @@ def compress_explanation(text: str) -> str:
     text = '\n'.join(paragraphs)
     return text.strip()
 
+def compress_translation(text: str) -> str:
+    """
+    Preserve line structure while removing filler words and extra blank lines.
+    """
+
+    text = text.replace('\r\n', '\n').replace('\r', '\n')
+    lines = []
+    for line in text.split('\n'):
+        cleaned = line.strip()
+        if re.match(r'^(selected|selection)\s*[:?]', cleaned, re.IGNORECASE):
+            continue
+        lines.append(cleaned)
+
+    # collapse multiple blank lines
+    compact = []
+    prev_blank = False
+    for line in lines:
+        is_blank = line == ''
+        if is_blank and prev_blank:
+            continue
+        compact.append(line)
+        prev_blank = is_blank
+
+    return '\n'.join(compact).strip()
+
 # Optional: auto-apply local proxy for VPN if provided via env.
 proxy_port = os.getenv("PROXY_PORT", "").strip()
 proxy_type = os.getenv("PROXY_TYPE", "http").strip().lower()
@@ -164,12 +210,13 @@ if proxy_port and "HTTP_PROXY" not in os.environ and "HTTPS_PROXY" not in os.env
     os.environ["HTTPS_PROXY"] = proxy_url
 
 app = Flask(__name__)
-CORS(app, resources={r"/explain": {"origins": "*"}})
+CORS(app, resources={r"/explain": {"origins": "*"}, r"/translate": {"origins": "*"}})
 
 BASE_URL = os.getenv("BASE_URL", "https://api.vectorengine.ai").rstrip("/")
 DEFAULT_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 API_KEY = os.getenv("OPENAI_API_KEY") or os.getenv("API_KEY")
 MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "8000"))
+TRANSLATE_TARGET_LANG = os.getenv("TRANSLATE_TARGET_LANG", "中文")
 
 
 @app.route("/explain", methods=["POST"])
@@ -201,7 +248,6 @@ def explain():
         # 目标策略：输出长度与输入长度成比例，示例：100 字输入 -> 约 1000 token 输出
         # 计算方法：每个输入字符映射约 10 token，最少 100 token，最大上限 4000 token
         source_input = selection or user_prompt or normalized_input
-        input_len = len(source_input)
         
         #computed_max_tokens = min(MAX_OUTPUT_TOKENS, max(200, input_len * 12))
         if input_category == "long_text_analysis":
@@ -240,6 +286,68 @@ def explain():
 
         # 应用输出优化：压缩冗余表述
         optimized_output = compress_explanation(output_text)
+
+        return jsonify(ok=True, text=optimized_output.strip(), finish_reason=finish_reason)
+
+    except Exception as exc:
+        traceback.print_exc()
+        return jsonify(ok=False, error=f"Server error: {exc}"), 500
+
+
+@app.route("/translate", methods=["POST"])
+def translate():
+    try:
+        data = request.get_json(silent=True) or {}
+        text = (data.get("text") or "").strip()
+        user_prompt = (data.get("prompt") or "").strip()
+
+        if not text and not user_prompt:
+            return jsonify(ok=False, error="Missing text"), 400
+
+        if not text:
+            text = user_prompt
+
+        if not API_KEY:
+            return jsonify(ok=False, error="Missing API key"), 400
+
+        system_prompt = build_translate_prompt(TRANSLATE_TARGET_LANG)
+
+        url = f"{BASE_URL}/v1/chat/completions"
+        headers = {
+            "Authorization": f"Bearer {API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        payload = {
+            "model": DEFAULT_MODEL,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text}
+            ],
+            "temperature": 0.3,
+            "max_tokens": 600,
+            "stream": False,
+        }
+
+        with httpx.Client(timeout=30.0) as client:
+            resp = client.post(url, headers=headers, json=payload)
+
+        if resp.status_code != 200:
+            return jsonify(ok=False, error=f"Upstream error: {resp.text}"), 502
+
+        response_data = resp.json()
+        output_text = None
+        finish_reason = None
+        try:
+            output_text = response_data["choices"][0]["message"]["content"]
+            finish_reason = response_data["choices"][0].get("finish_reason")
+        except Exception:
+            output_text = None
+
+        if not output_text:
+            return jsonify(ok=False, error="Empty response"), 502
+
+        optimized_output = compress_translation(output_text)
 
         return jsonify(ok=True, text=optimized_output.strip(), finish_reason=finish_reason)
 
