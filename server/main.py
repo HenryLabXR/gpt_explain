@@ -8,6 +8,21 @@ from dotenv import load_dotenv
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+try:
+    from .prompts import (
+        PROMPT_EXPLAIN_BASE,
+        PROMPT_EXPLAIN_LONG,
+        PROMPT_EXPLAIN_SHORT,
+        PROMPT_TRANSLATE_TEMPLATE,
+    )
+except ImportError:
+    from prompts import (
+        PROMPT_EXPLAIN_BASE,
+        PROMPT_EXPLAIN_LONG,
+        PROMPT_EXPLAIN_SHORT,
+        PROMPT_TRANSLATE_TEMPLATE,
+    )
+
 load_dotenv(dotenv_path=Path(__file__).with_name(".env"))
 
 # ============================================================================
@@ -35,84 +50,18 @@ def normalize_user_input(raw_input: str) -> tuple:
     return text, category
 
 
-def build_optimized_prompt(user_input: str, category: str) -> str:
-    """
-    构建经济高效的系统prompt
-    
-    类比：这就像给AI一个清晰的设计蓝图，而不是模糊的需求文档
-    """
-    
-    base_system_prompt = """你是一个知识解答助手，致力于用最简洁有效的语言传达概念。
+def build_short_explain_prompt() -> str:
+    return PROMPT_EXPLAIN_BASE + PROMPT_EXPLAIN_SHORT
 
-【回答格式要求】
-- 持【中文回答】
-- 严谨学术风格，不使用任何markdown格式符号（如**、*、#等）
-- 表达自然流畅，避免每句强制换行，不要产生多余空行
-- 避免冗长铺垫，直接呈现答案
-- 【重要】用必要的类比让抽象概念具象化
 
-【禁止项】
-- 不使用 ** 或任何markdown加粗标记
-- 不使用 * 或 - 等列表符号作为项目符号
-- 不使用 # 等标题符号
-- 不使用填充性用语（如"综上所述"、"值得注意的是"）
-- 不要逐字重复或原样复述用户提供的文本；只提取要点并进行解释或重构
-- 回答长度应随输入长度增长：当用户输入为长段落时，允许更详尽的解释
-- 
-"""
-    
-    if category == "long_text_analysis":
-        specific_prompt = """
-    【长文本解释分析 - 帮助理解为首要目标】
-    用户提供了一段详细的文本，你的任务是让他完全理解这段话
-
-    具体步骤：
-    1. 单句提炼 - 用一句话说清"这段话的灵魂是什么"，包含一个日常类比，让人瞬间get
-    2. 拆解核心机制 - 一句话概括后，拆解1-3个关键概念，每个用2-3句通俗话+生活例子解释（避免专业术语堆砌）
-    3. 应用与场景 - 这个概念/机制在什么场景下用，有什么实际意义，如何与其他概念关联
-    4.【重要】 整体印象比喻 - 用1个综合性的类比或比喻，让读者形成深刻的整体理解、帮助记忆
-
-    输出格式：
-    2-4个段落，各段自然连贯，不要在段落间插入多余空行。同一段落内的句子用逗号或句号自然连接，不要每句分行。
-    - 第1段（核心理解）：1句灵魂总结+类比，用最简洁的方式tell the big picture
-    - 第2-3段（拆解与深化）：逐个拆解关键概念，每个2-3句+1个类比或例子；解释为什么和怎么用
-    - 最后1段（收束）：1个综合类比或对照，帮读者形成完整映像
-
-    语言技巧：
-    - 多用"就像"、"好比"、"类似于"等类比词引出生活例子
-    - 用反问句或对比来加深理解（"你可能想，为什么不...？原因是..."）
-    - 避免罗列，强调逻辑关系（"因此"、"这样才能"、"结果是"）
-    - 每个抽象概念后立刻跟一个具体例子或数字，增强代入感
-
-    关键：段落间不要插入空行，保持文本紧凑连贯。整体字数通常150-300词；长段落时可放宽到200-500词。
-    """
-    elif category == "term_definition":
-        specific_prompt = """
-【术语简洁介绍】
-输出结构（必须严格遵守）：
-核心定义（一句话，包含简洁的类比）
-[换行]
-比喻或类比解释：用一个生活中的例子或场景来说明这个术语的含义
-[换行]
-应用场景或例子
-[换行]
-关键特性1：不超过2句
-关键特性2：不超过2句
-关键特性3：不超过2句
-回答长度：80-150词
-"""
-    else:
-        specific_prompt = """
-    【通用回答指南】
-    按信息密度和清晰性组织答案。
-    使用换行分隔核心内容的不同部分。
-    回答长度：80-150词（若用户输入为长段落，可适当延长以便充分解释）
-    """
-    
-    return base_system_prompt + specific_prompt
+def build_long_explain_prompt() -> str:
+    return PROMPT_EXPLAIN_BASE + PROMPT_EXPLAIN_LONG
 
 
 def build_translate_prompt(target_lang: str) -> str:
+    return PROMPT_TRANSLATE_TEMPLATE.format(target_lang=target_lang)
+
+
     return f"""
 你是一个专业翻译与术语解释助手，请将用户输入内容翻译为{target_lang}。
 
@@ -130,13 +79,7 @@ def compress_explanation(text: str) -> str:
     后处理：删除冗余表述，保留清晰段落结构但减少过多空行
     """
     # 移除常见的填充词
-    filler_words = [
-    "综上所述",
-    "值得注意的是",
-    "需要指出的是",
-    "可以看出",
-    "总体来看"
-    ]
+    filler_words = ["In summary", "It should be noted", "Worth mentioning", "As is known", "Especially", "Very"]
     for word in filler_words:
         text = text.replace(word, '')
     
@@ -237,7 +180,7 @@ def explain():
 
         # 应用输入优化和Prompt构建
         normalized_input, input_category = normalize_user_input(user_prompt)
-        system_prompt = build_optimized_prompt(normalized_input, input_category)
+        system_prompt = build_long_explain_prompt() if input_category == "long_text_analysis" else build_short_explain_prompt()
 
         url = f"{BASE_URL}/v1/chat/completions"
         headers = {
